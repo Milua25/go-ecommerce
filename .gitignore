@@ -1,0 +1,24 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.coverprofile
+coverage.out
+bin/
+dist/
+
+# Workspace files
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
