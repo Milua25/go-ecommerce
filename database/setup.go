@@ -5,15 +5,27 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-func DBSet() (*mongo.Client, error) {
-	// MongoDB connection setup logic goes here
-	clientOptions := options.Client().ApplyURI("mongodb://root:password@localhost:27017/?retryWrites=true&w=majority") // Replace with your MongoDB URI
+type Logger struct{}
+
+func (l *Logger) Info(level int, message string, keysAndValues ...any) {
+	log.Printf("INFO: %s - %v\n", message, formatKV(keysAndValues))
+}
+
+func (l *Logger) Error(err error, message string, keysAndValues ...any) {
+	log.Printf("ERROR: %s - %v - Error: %v\n", message, formatKV(keysAndValues), err)
+}
+
+func DBSet(uri string, l *Logger) (*mongo.Client, error) {
+	loggerOptions := options.Logger().SetSink(l).SetComponentLevel(options.LogComponentCommand, options.LogLevelDebug)
+
+	clientOptions := options.Client().ApplyURI(uri).SetLoggerOptions(loggerOptions)
 	clientOptions.SetServerSelectionTimeout(10 * time.Second)
 	clientOptions.SetConnectTimeout(10 * time.Second) // Set server selection timeout
 
@@ -21,6 +33,8 @@ func DBSet() (*mongo.Client, error) {
 	maxPoolSize := uint64(100)
 	clientOptions.SetMinPoolSize(minPoolSize)
 	clientOptions.SetMaxPoolSize(maxPoolSize)
+
+	// logger options
 
 	const maxRetries = 5
 	baseDelay := 500 * time.Millisecond
@@ -36,7 +50,7 @@ func DBSet() (*mongo.Client, error) {
 			pingErr := client.Ping(ctx, nil)
 			cancel()
 			if pingErr == nil {
-				fmt.Println("Connected to MongoDB!")
+				log.Printf("Connected to MongoDB")
 				return client, nil
 			}
 			_ = client.Disconnect(context.Background()) // Clean up the client if ping fails
@@ -58,25 +72,17 @@ func DBSet() (*mongo.Client, error) {
 			attempt+1, maxRetries+1, retryErr, delay)
 		time.Sleep(delay)
 	}
-	log.Fatalf("MongoDB unavailable after %d attempts: %v", maxRetries+1, lastErr)
-	return nil, lastErr
+	return nil, fmt.Errorf("mongodb unavailable after %d attempts: %w", maxRetries+1, lastErr)
 }
 
 func UserData(client *mongo.Client, collectionName, databaseName string) *mongo.Collection {
 	var collection *mongo.Collection = client.Database(databaseName).Collection(collectionName)
-	if collection == nil {
-		log.Fatalf("Failed to get collection: %s", collectionName)
-	}
 
 	return collection
 }
 
 func ProductData(client *mongo.Client, collectionName, databaseName string) *mongo.Collection {
 	var productCollection *mongo.Collection = client.Database(databaseName).Collection(collectionName)
-	if productCollection == nil {
-		log.Fatalf("Failed to get collection: %s", collectionName)
-	}
-
 	return productCollection
 }
 
@@ -113,4 +119,12 @@ func EnsureCollections(ctx context.Context, client *mongo.Client, databaseName s
 	}
 
 	return nil
+}
+
+func formatKV(kv []any) string {
+	var b strings.Builder
+	for i := 0; i < len(kv); i += 2 {
+		fmt.Fprintf(&b, "%v=%v ", kv[i], kv[i+1])
+	}
+	return b.String()
 }

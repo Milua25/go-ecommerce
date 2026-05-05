@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -14,13 +17,10 @@ import (
 	"github.com/milua25/e-commerce-backend/database"
 	"github.com/milua25/e-commerce-backend/middlewares"
 	"github.com/milua25/e-commerce-backend/routes"
+	"github.com/milua25/e-commerce-backend/tokens"
 )
 
 func main() {
-	// port := os.Getenv("PORT")
-	// if port == "" {
-	// 	port = "8000"
-	// }
 
 	// Load configuration
 	cfg, missingVars := config.LoadConfig()
@@ -30,9 +30,18 @@ func main() {
 		for _, v := range missingVars {
 			log.Printf(" - %s\n", v)
 		}
+		os.Exit(1)
 	}
 
-	client, err := database.DBSet()
+	logger := &database.Logger{}
+	mongoURI := fmt.Sprintf(
+		"mongodb://%s:%s@%s:%s/?retryWrites=true&w=majority",
+		url.QueryEscape(cfg.DBConfig.User),
+		url.QueryEscape(cfg.DBConfig.Password),
+		cfg.DBConfig.Host,
+		cfg.DBConfig.Port,
+	)
+	client, err := database.DBSet(mongoURI, logger)
 	if err != nil {
 		log.Fatalf("failed to initialize MongoDB: %v", err)
 	}
@@ -59,6 +68,7 @@ func main() {
 		database.UserData(client, cfg.DBConfig.UserCollection, cfg.DBConfig.DBName),
 		cfg.JWTConfig.SecretKey,
 	)
+	authService := tokens.NewAuthService(cfg.JWTConfig.SecretKey)
 
 	sigCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -75,10 +85,12 @@ func main() {
 	})
 
 	protected := router.Group("/")
-	protected.Use(middlewares.Authentication())
+	protected.Use(middlewares.Authentication(authService))
 	{
 		//user routes
 		protected.PATCH("/users/:id/update", app.UpdateUserDetails())
+		protected.GET("/users/count", app.GetUserCount())
+		protected.POST("/users/:id/address/add", app.CreateAddress())
 		// protected.DELETE("/user/profile/delete", app.DeleteUserProfile())
 
 		protected.POST("/products/add", app.AddProductToDatabase())

@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/milua25/e-commerce-backend/database"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
@@ -18,6 +18,7 @@ type Application struct {
 	productCollection *mongo.Collection
 	userCollection    *mongo.Collection
 	secretKey         string
+	store             *database.Storage
 	// cartCollection    *mongo.Collection
 }
 
@@ -26,7 +27,7 @@ func NewApplication(productCol, userCol *mongo.Collection, secretKey string) *Ap
 		productCollection: productCol,
 		userCollection:    userCol,
 		secretKey:         secretKey,
-		// cartCollection:    cartCol,
+		store:             database.NewStorage(productCol, userCol),
 	}
 }
 
@@ -45,12 +46,12 @@ func (app *Application) AddProductToCart() gin.HandlerFunc {
 			return
 		}
 
-		productId, err := primitive.ObjectIDFromHex(productQueryID)
+		productId, err := bson.ObjectIDFromHex(productQueryID)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
 			return
 		}
-		userId, err := primitive.ObjectIDFromHex(userQueryID)
+		userId, err := bson.ObjectIDFromHex(userQueryID)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 			return
@@ -59,7 +60,7 @@ func (app *Application) AddProductToCart() gin.HandlerFunc {
 		ctx, cancel := requestContext(c, DefaultTimeout)
 		defer cancel()
 
-		product, err := database.GetProductForCart(ctx, app.productCollection, productId)
+		product, err := app.store.CartStoreCollection.GetProductForCart(ctx, productId)
 		if err != nil {
 			log.Printf("Error fetching product: %v\n", err)
 			if err == database.ErrProductNotFound {
@@ -71,7 +72,7 @@ func (app *Application) AddProductToCart() gin.HandlerFunc {
 		}
 
 		// Call the database function to add the product to the cart
-		err = database.AddProductToCart(ctx, app.userCollection, userId, product)
+		err = app.store.CartStoreCollection.AddProductToCart(ctx, userId, product)
 		if err != nil {
 			log.Printf("Error adding product to cart: %v\n", err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -97,12 +98,12 @@ func (app *Application) ViewCart() gin.HandlerFunc {
 			return
 		}
 		//
-		productId, err := primitive.ObjectIDFromHex(productQueryID)
+		productId, err := bson.ObjectIDFromHex(productQueryID)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
 			return
 		}
-		userId, err := primitive.ObjectIDFromHex(userQueryID)
+		userId, err := bson.ObjectIDFromHex(userQueryID)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 			return
@@ -112,7 +113,7 @@ func (app *Application) ViewCart() gin.HandlerFunc {
 		defer cancel()
 
 		// Call the database function to view the product in the cart
-		err = database.ViewProductCart(ctx, app.productCollection, productId, userId)
+		err = app.store.CartStoreCollection.ViewProductCart(ctx, productId, userId)
 		if err != nil {
 			c.IndentedJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -137,12 +138,12 @@ func (app *Application) RemoveItemFromCart() gin.HandlerFunc {
 			return
 		}
 
-		productId, err := primitive.ObjectIDFromHex(productQueryID)
+		productId, err := bson.ObjectIDFromHex(productQueryID)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
 			return
 		}
-		userId, err := primitive.ObjectIDFromHex(userQueryID)
+		userId, err := bson.ObjectIDFromHex(userQueryID)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 			return
@@ -151,7 +152,7 @@ func (app *Application) RemoveItemFromCart() gin.HandlerFunc {
 		ctx, cancel := requestContext(c, DefaultTimeout)
 		defer cancel()
 		// Call the database function to remove the product from the cart
-		err = database.RemoveProductFromCart(ctx, app.productCollection, userId, productId)
+		err = app.store.CartStoreCollection.RemoveProductFromCart(ctx, userId, productId)
 		if err != nil {
 			c.IndentedJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -176,13 +177,13 @@ func (app *Application) ClearCart() gin.HandlerFunc {
 			return
 		}
 
-		// productId, err := primitive.ObjectIDFromHex(productQueryID)
+		// productId, err := bson.ObjectIDFromHex(productQueryID)
 		// if err != nil {
 		// 	c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
 		// 	return
 		// }
 
-		userId, err := primitive.ObjectIDFromHex(userQueryID)
+		userId, err := bson.ObjectIDFromHex(userQueryID)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 			return
@@ -191,7 +192,7 @@ func (app *Application) ClearCart() gin.HandlerFunc {
 		ctx, cancel := requestContext(c, DefaultTimeout)
 		defer cancel()
 		// Call the database function to clear the cart
-		err = database.ClearCart(ctx, app.productCollection, userId)
+		err = app.store.CartStoreCollection.ClearCart(ctx, userId)
 		if err != nil {
 			c.IndentedJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -216,12 +217,12 @@ func (app *Application) InstantBuy() gin.HandlerFunc {
 			return
 		}
 
-		productId, err := primitive.ObjectIDFromHex(productQueryID)
+		productId, err := bson.ObjectIDFromHex(productQueryID)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
 			return
 		}
-		userId, err := primitive.ObjectIDFromHex(userQueryID)
+		userId, err := bson.ObjectIDFromHex(userQueryID)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 			return
@@ -230,7 +231,7 @@ func (app *Application) InstantBuy() gin.HandlerFunc {
 		ctx, cancel := requestContext(c, DefaultTimeout)
 		defer cancel()
 		// Call the database function to add the product to the cart
-		err = database.InstantBuy(ctx, app.productCollection, userId, productId)
+		err = app.store.CartStoreCollection.InstantBuyFromCart(ctx, productId, userId)
 		if err != nil {
 			c.IndentedJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -251,14 +252,14 @@ func (app *Application) BuyFromCart() gin.HandlerFunc {
 
 		ctx, cancel := requestContext(c, DefaultTimeout)
 		defer cancel()
-		// userId, err := primitive.ObjectIDFromHex(userQueryID)
-		userId, err := primitive.ObjectIDFromHex(userQueryID)
+		// userId, err := bson.ObjectIDFromHex(userQueryID)
+		userId, err := bson.ObjectIDFromHex(userQueryID)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 			return
 		}
 
-		err = database.BuyItemFromCart(ctx, app.userCollection, userId)
+		err = app.store.CartStoreCollection.BuyItemFromCart(ctx, userId)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -280,7 +281,7 @@ func (app *Application) GetItemsInCart() gin.HandlerFunc {
 		}
 
 		// Convert user_id to ObjectID
-		userId, err := primitive.ObjectIDFromHex(user_id)
+		userId, err := bson.ObjectIDFromHex(user_id)
 		if err != nil {
 			log.Printf("Error converting user ID to ObjectID: %v\n", err)
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
@@ -291,7 +292,7 @@ func (app *Application) GetItemsInCart() gin.HandlerFunc {
 		defer cancel()
 
 		// find the user with the filled cart items
-		filledCartItems, err := database.FindUserWithFilledCart(ctx, app.userCollection, userId)
+		filledCartItems, err := app.store.CartStoreCollection.FindUserWithFilledCart(ctx, userId)
 		if err != nil {
 			log.Printf("Error finding user with filled cart: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -299,7 +300,7 @@ func (app *Application) GetItemsInCart() gin.HandlerFunc {
 		}
 
 		// aggregate the cart items
-		databaseItems, err := database.AggregateCartItems(ctx, app.userCollection, userId)
+		databaseItems, err := app.store.CartStoreCollection.AggregateCartItems(ctx, userId)
 		if err != nil {
 			log.Printf("Error aggregating cart items: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

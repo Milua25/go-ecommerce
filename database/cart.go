@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/milua25/e-commerce-backend/models"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
@@ -23,17 +22,21 @@ var (
 	ErrUnauthorized      = errors.New("Unauthorized access")
 	ErrInternalServer    = errors.New("Internal server error")
 	ErrAddressMaxReached = errors.New("Maximum number of addresses reached")
+	ErrAddressNotFound   = errors.New("address not found")
 	ErrNoFieldsToUpdate  = errors.New("no fields provided for update")
 	ErrCantUpdateUser    = errors.New("cannot update user with provided data")
 	ErrCantUserorder     = errors.New("cannot place order for the user")
+	ErrUserNotFound      = errors.New("User not found")
 )
 
 type CartStore struct {
+	productCollection *mongo.Collection
+	userCollection    *mongo.Collection
 }
 
-func GetProductForCart(ctx context.Context, collection *mongo.Collection, productId primitive.ObjectID) (models.ProductUser, error) {
+func (c *CartStore) GetProductForCart(ctx context.Context, productId bson.ObjectID) (models.ProductUser, error) {
 	var product models.ProductUser
-	err := collection.FindOne(ctx, bson.D{bson.E{Key: "_id", Value: productId}}).Decode(&product)
+	err := c.productCollection.FindOne(ctx, bson.D{bson.E{Key: "_id", Value: productId}}).Decode(&product)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return models.ProductUser{}, ErrProductNotFound
@@ -43,11 +46,11 @@ func GetProductForCart(ctx context.Context, collection *mongo.Collection, produc
 	return product, nil
 }
 
-func AddProductToCart(ctx context.Context, collection *mongo.Collection, userId primitive.ObjectID, model models.ProductUser) error {
+func (c *CartStore) AddProductToCart(ctx context.Context, userId bson.ObjectID, model models.ProductUser) error {
 	filter := bson.D{bson.E{Key: "_id", Value: userId}}
 	update := bson.D{bson.E{Key: "$push", Value: bson.D{bson.E{Key: "user_cart", Value: bson.D{bson.E{Key: "$each", Value: bson.A{model}}}}}}}
 
-	result, err := collection.UpdateOne(ctx, filter, update)
+	result, err := c.userCollection.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return ErrCantUpdateUser
 	}
@@ -57,13 +60,13 @@ func AddProductToCart(ctx context.Context, collection *mongo.Collection, userId 
 	return nil
 }
 
-func RemoveProductFromCart(ctx context.Context, userCollection *mongo.Collection, userId, productId primitive.ObjectID) error {
+func (c *CartStore) RemoveProductFromCart(ctx context.Context, userId, productId bson.ObjectID) error {
 
 	// Implementation for removing a product from the cart goes here
 	filter := bson.D{bson.E{Key: "_id", Value: userId}}
 	update := bson.D{bson.E{Key: "$pull", Value: bson.D{bson.E{Key: "user_cart", Value: bson.D{bson.E{Key: "_id", Value: productId}}}}}}
 
-	result, err := userCollection.UpdateMany(ctx, filter, update)
+	result, err := c.userCollection.UpdateMany(ctx, filter, update)
 	if err != nil {
 		return ErrCantUpdateUser
 	}
@@ -73,25 +76,25 @@ func RemoveProductFromCart(ctx context.Context, userCollection *mongo.Collection
 	return nil
 }
 
-func GetCartContents(ctx context.Context, collection *mongo.Collection, userId primitive.ObjectID) error {
+func (c *CartStore) GetCartContents(ctx context.Context, userId bson.ObjectID) error {
 	return nil
 }
 
-func ClearCart(ctx context.Context, collection *mongo.Collection, userId primitive.ObjectID) error {
+func (c *CartStore) ClearCart(ctx context.Context, userId bson.ObjectID) error {
 	return nil
 }
 
-func InstantBuy(ctx context.Context, collection *mongo.Collection, userId, productId primitive.ObjectID) error {
+func (c *CartStore) InstantBuy(ctx context.Context, userId, productId bson.ObjectID) error {
 	return nil
 }
 
-func BuyItemFromCart(ctx context.Context, usercollection *mongo.Collection, userId primitive.ObjectID) error {
+func (c *CartStore) BuyItemFromCart(ctx context.Context, userId bson.ObjectID) error {
 	// Implementation for buying items from the cart goes here
 	// fetch the user's cart, check stock for each item, process payment, and update inventory accordingly
 	var getcartItems models.User
 	var ordercart models.Order
 
-	ordercart.ID = primitive.NewObjectID()
+	ordercart.ID = bson.NewObjectID()
 	ordercart.OrderedAt = time.Now()
 	ordercart.OrderCart = make([]models.ProductUser, 0)
 	ordercart.PaymentMethod.COD = true
@@ -103,7 +106,7 @@ func BuyItemFromCart(ctx context.Context, usercollection *mongo.Collection, user
 		bson.E{Key: "total", Value: bson.D{bson.E{Key: "$sum", Value: "$user_cart.price"}}},
 	}}}
 
-	cursor, err := usercollection.Aggregate(ctx, mongo.Pipeline{
+	cursor, err := c.userCollection.Aggregate(ctx, mongo.Pipeline{
 		unwind, grouping,
 	})
 	if err != nil {
@@ -126,7 +129,7 @@ func BuyItemFromCart(ctx context.Context, usercollection *mongo.Collection, user
 	filter := bson.D{bson.E{Key: "_id", Value: userId}}
 	update := bson.D{bson.E{Key: "$push", Value: bson.D{bson.E{Key: "orders", Value: ordercart}}}}
 
-	result, err := usercollection.UpdateMany(ctx, filter, update)
+	result, err := c.userCollection.UpdateMany(ctx, filter, update)
 	if err != nil {
 		return ErrCantUserorder
 	}
@@ -134,7 +137,7 @@ func BuyItemFromCart(ctx context.Context, usercollection *mongo.Collection, user
 		return ErrUserIdNotFound
 	}
 
-	err = usercollection.FindOne(ctx, filter).Decode(&getcartItems)
+	err = c.userCollection.FindOne(ctx, filter).Decode(&getcartItems)
 	if err != nil {
 		return err
 	}
@@ -142,14 +145,14 @@ func BuyItemFromCart(ctx context.Context, usercollection *mongo.Collection, user
 	filter2 := bson.D{bson.E{Key: "_id", Value: userId}}
 	update2 := bson.M{"$push": bson.M{"orders.$[].order_list": bson.M{"$each": getcartItems.UserCart}}}
 
-	_, err = usercollection.UpdateOne(ctx, filter2, update2)
+	_, err = c.userCollection.UpdateOne(ctx, filter2, update2)
 	if err != nil {
 		return ErrCantUserorder
 	}
 
 	// Clear the user's cart after successful order placement
 	clearCart := bson.D{bson.E{Key: "$set", Value: bson.D{bson.E{Key: "user_cart", Value: []models.ProductUser{}}}}}
-	_, err = usercollection.UpdateMany(ctx, filter, clearCart)
+	_, err = c.userCollection.UpdateMany(ctx, filter, clearCart)
 	if err != nil {
 		return ErrCantUpdateUser
 	}
@@ -157,9 +160,9 @@ func BuyItemFromCart(ctx context.Context, usercollection *mongo.Collection, user
 	return nil
 }
 
-func FindUserWithFilledCart(ctx context.Context, collection *mongo.Collection, userId primitive.ObjectID) (models.User, error) {
+func (c *CartStore) FindUserWithFilledCart(ctx context.Context, userId bson.ObjectID) (models.User, error) {
 
-	result := collection.FindOne(ctx, bson.D{bson.E{Key: "_id", Value: userId}})
+	result := c.userCollection.FindOne(ctx, bson.D{bson.E{Key: "_id", Value: userId}})
 	if result.Err() != nil {
 		if errors.Is(result.Err(), mongo.ErrNoDocuments) {
 			return models.User{}, ErrUserIdNotFound
@@ -180,7 +183,7 @@ func FindUserWithFilledCart(ctx context.Context, collection *mongo.Collection, u
 	return user, nil
 }
 
-func AggregateCartItems(ctx context.Context, collection *mongo.Collection, userId primitive.ObjectID) (bson.M, error) {
+func (c *CartStore) AggregateCartItems(ctx context.Context, userId bson.ObjectID) (bson.M, error) {
 	// Define the aggregation pipeline
 	filter_match := bson.D{bson.E{Key: "$match", Value: bson.D{bson.E{Key: "_id", Value: userId}}}}
 	unwind_cart := bson.D{bson.E{Key: "$unwind", Value: "$userCart"}}
@@ -191,7 +194,7 @@ func AggregateCartItems(ctx context.Context, collection *mongo.Collection, userI
 	}}}
 
 	// Execute the aggregation pipeline
-	cursor, err := collection.Aggregate(ctx, mongo.Pipeline{filter_match, unwind_cart, grouping})
+	cursor, err := c.userCollection.Aggregate(ctx, mongo.Pipeline{filter_match, unwind_cart, grouping})
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +203,7 @@ func AggregateCartItems(ctx context.Context, collection *mongo.Collection, userI
 	var result bson.M
 
 	// var results []struct {
-	// 	ID    primitive.ObjectID `bson:"_id"`
+	// 	ID    bson.ObjectID `bson:"_id"`
 	// 	Total float64            `bson:"total"`
 	// }
 
@@ -215,21 +218,21 @@ func AggregateCartItems(ctx context.Context, collection *mongo.Collection, userI
 	return result, nil
 }
 
-func ViewProductCart(ctx context.Context, collection *mongo.Collection, productId primitive.ObjectID, userId primitive.ObjectID) error {
+func (c *CartStore) ViewProductCart(ctx context.Context, productId bson.ObjectID, userId bson.ObjectID) error {
 	return nil
 }
 
-func InstantBuyFromCart(ctx context.Context, productCollection, userCollection *mongo.Collection, productId, userId primitive.ObjectID) error {
+func (c *CartStore) InstantBuyFromCart(ctx context.Context, productId, userId bson.ObjectID) error {
 	var productDetails models.ProductUser
 	var ordercart models.Order
 
-	ordercart.ID = primitive.NewObjectID()
+	ordercart.ID = bson.NewObjectID()
 	ordercart.OrderedAt = time.Now()
 	ordercart.OrderCart = make([]models.ProductUser, 0)
 	ordercart.PaymentMethod.COD = true
 
 	// Fetch the product details
-	err := productCollection.FindOne(ctx, bson.D{bson.E{Key: "_id", Value: productId}}).Decode(&productDetails)
+	err := c.productCollection.FindOne(ctx, bson.D{bson.E{Key: "_id", Value: productId}}).Decode(&productDetails)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return ErrProductNotFound
@@ -243,7 +246,7 @@ func InstantBuyFromCart(ctx context.Context, productCollection, userCollection *
 	filter := bson.D{bson.E{Key: "_id", Value: productId}}
 	update := bson.D{bson.E{Key: "$inc", Value: bson.D{bson.E{Key: "quantity", Value: -1}}}}
 
-	_, err = userCollection.UpdateOne(ctx, filter, update)
+	_, err = c.userCollection.UpdateOne(ctx, filter, update)
 	if err != nil {
 		return err
 	}
@@ -252,7 +255,7 @@ func InstantBuyFromCart(ctx context.Context, productCollection, userCollection *
 	orderFilter := bson.D{bson.E{Key: "_id", Value: userId}}
 	orderUpdate := bson.D{bson.E{Key: "$push", Value: bson.D{bson.E{Key: "orders", Value: ordercart}}}}
 
-	result, err := userCollection.UpdateOne(ctx, orderFilter, orderUpdate)
+	result, err := c.userCollection.UpdateOne(ctx, orderFilter, orderUpdate)
 	if err != nil {
 		return ErrCantUserorder
 	}

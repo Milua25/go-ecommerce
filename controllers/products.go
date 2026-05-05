@@ -5,9 +5,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/milua25/e-commerce-backend/database"
 	"github.com/milua25/e-commerce-backend/helpers"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 func (app *Application) AddProductToDatabase() gin.HandlerFunc {
@@ -48,14 +47,14 @@ func (app *Application) AddProductToDatabase() gin.HandlerFunc {
 			return
 		}
 
-		primitivUserID, err := primitive.ObjectIDFromHex(userId)
+		primitivUserID, err := bson.ObjectIDFromHex(userId)
 		if err != nil {
 			log.Printf("Error converting user ID: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
 		// check if user is admin
-		isAdmin, err := database.IsUserAdmin(ctx, app.userCollection, primitivUserID)
+		isAdmin, err := app.store.UserStoreCollection.IsUserAdmin(ctx, primitivUserID)
 		if err != nil {
 			log.Printf("Error checking user role: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -66,7 +65,7 @@ func (app *Application) AddProductToDatabase() gin.HandlerFunc {
 			return
 		}
 
-		err = database.CreateProduct(ctx, app.productCollection, newProduct.ToModel())
+		err = app.store.ProductStoreCollection.CreateProduct(ctx, newProduct.ToModel())
 		if err != nil {
 			log.Printf("Error creating product: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{

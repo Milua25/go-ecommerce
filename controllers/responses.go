@@ -3,12 +3,12 @@ package controllers
 import (
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // User Response Model
 type UserResponse struct {
-	ID             primitive.ObjectID    `json:"id"`
+	ID             bson.ObjectID    `json:"id"`
 	Username       string                `json:"username"`
 	Email          string                `json:"email"`
 	FirstName      *string               `json:"first_name"`
@@ -26,7 +26,7 @@ type UserResponse struct {
 
 // Product Response Model
 type ProductResponse struct {
-	ID          primitive.ObjectID `json:"id"`
+	ID          bson.ObjectID `json:"id"`
 	ProductName string             `json:"product_name"`
 	ProductID   string             `json:"product_id"`
 	Description string             `json:"description"`
@@ -48,7 +48,7 @@ type ProductUserResponse struct {
 
 // Address Response Model
 type AddressResponse struct {
-	ID         primitive.ObjectID `json:"id"`
+	ID         bson.ObjectID `json:"id"`
 	HouseNo    string             `json:"house_no"`
 	Street     string             `json:"street"`
 	City       string             `json:"city"`
@@ -59,7 +59,7 @@ type AddressResponse struct {
 
 // Order Response Model
 type OrderResponse struct {
-	ID            primitive.ObjectID    `json:"id"`
+	ID            bson.ObjectID    `json:"id"`
 	Order_Cart    []ProductUserResponse `json:"order_cart"`
 	Ordered_At    time.Time             `json:"ordered_at"`
 	Price         uint64                `json:"price"`
@@ -71,7 +71,7 @@ type OrderResponse struct {
 
 // Payment Response Model
 type PaymentResponse struct {
-	ID      primitive.ObjectID `json:"id"`
+	ID      bson.ObjectID `json:"id"`
 	Digital bool               `json:"digital_payment"`
 	COD     bool               `json:"cod"`
 }

@@ -8,10 +8,18 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
-func FindAllProducts(ctx context.Context, collection *mongo.Collection) ([]models.Product, error) {
+type ProductStore struct {
+	productCollection *mongo.Collection
+}
+
+func NewProductStore(collection *mongo.Collection) *ProductStore {
+	return &ProductStore{productCollection: collection}
+}
+
+func (p *ProductStore) FindAllProducts(ctx context.Context) ([]models.Product, error) {
 	var productList []models.Product
 
-	cursor, err := collection.Find(ctx, bson.M{})
+	cursor, err := p.productCollection.Find(ctx, bson.M{})
 
 	if err != nil {
 		return nil, err
@@ -26,10 +34,10 @@ func FindAllProducts(ctx context.Context, collection *mongo.Collection) ([]model
 	return productList, nil
 }
 
-func FindProductByQuery(ctx context.Context, collection *mongo.Collection, query string) ([]models.Product, error) {
+func (p *ProductStore) FindProductByQuery(ctx context.Context, query string) ([]models.Product, error) {
 	var searchProducts []models.Product
 
-	cursor, err := collection.Find(ctx, bson.M{"product_name": bson.M{"$regex": query, "$options": "i"}})
+	cursor, err := p.productCollection.Find(ctx, bson.M{"product_name": bson.M{"$regex": query, "$options": "i"}})
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +50,7 @@ func FindProductByQuery(ctx context.Context, collection *mongo.Collection, query
 	return searchProducts, nil
 }
 
-func CreateProduct(ctx context.Context, productCollection *mongo.Collection, product models.Product) error {
-	_, err := productCollection.InsertOne(ctx, product)
+func (p *ProductStore) CreateProduct(ctx context.Context, product models.Product) error {
+	_, err := p.productCollection.InsertOne(ctx, product)
 	return err
 }

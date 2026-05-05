@@ -4,12 +4,12 @@ import (
 	"time"
 
 	"github.com/milua25/e-commerce-backend/models"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // User Input Models
 type CreateUserInput struct {
-	ID           primitive.ObjectID `json:"-"`
+	ID           bson.ObjectID `json:"-"`
 	UserID       string             `json:"-"`
 	Username     string             `json:"username" binding:"required" validate:"min=2,max=30"`
 	Email        string             `json:"email" binding:"required,email"`
@@ -41,7 +41,7 @@ type LoginInput struct {
 
 // Product Input Models
 type CreateProductInput struct {
-	ID          primitive.ObjectID `json:"-"`
+	ID          bson.ObjectID `json:"-"`
 	ProductName string             `json:"product_name" binding:"required"`
 	ProductID   string             `json:"-"`
 	Description string             `json:"description" binding:"required"`
@@ -74,7 +74,7 @@ type CreateAddressInput struct {
 	Street     string `json:"street" binding:"required"`
 	City       string `json:"city" binding:"required"`
 	State      string `json:"state" binding:"required"`
-	PostalCode string `json:"postal_code" binding:"required"`
+	PostalCode string `json:"postal_code" binding:"omitempty"`
 	Country    string `json:"country" binding:"required"`
 }
 
@@ -102,7 +102,7 @@ type PaymentInput struct {
 
 func (input CreateAddressInput) ToModel() models.Address {
 	return models.Address{
-		ID:         primitive.NewObjectID(),
+		ID:         bson.NewObjectID(),
 		HouseNo:    &input.HouseNo,
 		Street:     &input.Street,
 		City:       &input.City,
@@ -125,26 +125,27 @@ func (input UpdateAddressInput) ToModel() models.Address {
 
 func (input CreateUserInput) ToModel() models.User {
 	return models.User{
-		ID:           input.ID,
-		UserID:       input.UserID,
-		Username:     input.Username,
-		Email:        input.Email,
-		FirstName:    input.FirstName,
-		LastName:     input.LastName,
-		Phone:        &input.Phone,
-		Password:     input.Password,
-		CreatedAt:    input.CreatedAt,
-		UpdatedAt:    input.UpdatedAt,
-		Token:        input.Token,
-		RefreshToken: input.RefreshToken,
-		Role:         input.Role,
+		ID:             input.ID,
+		UserID:         input.UserID,
+		Username:       input.Username,
+		Email:          input.Email,
+		FirstName:      input.FirstName,
+		LastName:       input.LastName,
+		Phone:          &input.Phone,
+		Password:       input.Password,
+		CreatedAt:      input.CreatedAt,
+		UpdatedAt:      input.UpdatedAt,
+		Token:          input.Token,
+		RefreshToken:   input.RefreshToken,
+		Role:           input.Role,
+		AddressDetails: []models.Address{},
 	}
 }
 
 func (input CreateProductInput) ToModel() models.Product {
 	return models.Product{
-		ID:          primitive.NewObjectID(),
-		ProductID:   primitive.NewObjectID().Hex(),
+		ID:          bson.NewObjectID(),
+		ProductID:   bson.NewObjectID().Hex(),
 		ProductName: input.ProductName,
 		Description: input.Description,
 		Price:       input.Price,

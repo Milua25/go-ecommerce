@@ -8,11 +8,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"github.com/milua25/e-commerce-backend/database"
 	"github.com/milua25/e-commerce-backend/helpers"
 	"github.com/milua25/e-commerce-backend/models"
 	"github.com/milua25/e-commerce-backend/tokens"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 var Validate = validator.New()
@@ -44,7 +43,7 @@ func (app *Application) SignUp() gin.HandlerFunc {
 			return
 		}
 		// Check if a user with the same email already exists
-		_, exists, err := database.FindUserByEmail(ctx, app.userCollection, newUser.Email)
+		_, exists, err := app.store.UserStoreCollection.FindUserByEmail(ctx, newUser.Email)
 		if err != nil {
 			log.Printf("Error checking for existing user: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error checking for existing user"})
@@ -55,7 +54,7 @@ func (app *Application) SignUp() gin.HandlerFunc {
 			return
 		}
 
-		phoneExists, err := database.FindUserByPhone(ctx, app.userCollection, newUser.Phone)
+		phoneExists, err := app.store.UserStoreCollection.FindUserByPhone(ctx, newUser.Phone)
 		if err != nil {
 			log.Printf("Error checking for existing phone: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error checking for existing user"})
@@ -77,7 +76,7 @@ func (app *Application) SignUp() gin.HandlerFunc {
 		newUser.Password = hashedPassword
 		newUser.CreatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		newUser.UpdatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
-		newUser.ID = primitive.NewObjectID()
+		newUser.ID = bson.NewObjectID()
 		newUser.UserID = newUser.ID.Hex()
 
 		// token generation
@@ -93,7 +92,7 @@ func (app *Application) SignUp() gin.HandlerFunc {
 		newUser.RefreshToken = &refreshToken
 
 		// Insert the new user into the database
-		err = database.CreateUser(ctx, app.userCollection, newUser.ToModel())
+		err = app.store.UserStoreCollection.CreateUser(ctx, newUser.ToModel())
 		if err != nil {
 			log.Printf("Error creating user: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -155,7 +154,7 @@ func (app *Application) Login() gin.HandlerFunc {
 		}
 
 		var foundUser models.User
-		foundUser, _, err = database.FindUserByEmail(ctx, app.userCollection, loginInput.Email)
+		foundUser, _, err = app.store.UserStoreCollection.FindUserByEmail(ctx, loginInput.Email)
 		if err != nil {
 			log.Printf("Error finding user: %v\n", err)
 			c.JSON(http.StatusUnauthorized, gin.H{
@@ -264,7 +263,7 @@ func (app *Application) UpdateUserDetails() gin.HandlerFunc {
 			return
 		}
 
-		primitiveUserID, err := primitive.ObjectIDFromHex(userValue)
+		primitiveUserID, err := bson.ObjectIDFromHex(userValue)
 		if err != nil {
 			log.Printf("Error converting user ID to ObjectID: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -272,7 +271,7 @@ func (app *Application) UpdateUserDetails() gin.HandlerFunc {
 		}
 
 		// check if user exists
-		user, exists, err := database.FindUserByID(ctx, app.userCollection, primitiveUserID)
+		user, exists, err := app.store.UserStoreCollection.FindUserByID(ctx, primitiveUserID)
 		if err != nil {
 			log.Printf("Error finding user: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -315,7 +314,7 @@ func (app *Application) UpdateUserDetails() gin.HandlerFunc {
 
 		// Check if the user is trying to update their email to one that already exists
 		if updateInput.Email != nil && *updateInput.Email != user.Email {
-			_, exists, err := database.FindUserByEmail(ctx, app.userCollection, *updateInput.Email)
+			_, exists, err := app.store.UserStoreCollection.FindUserByEmail(ctx, *updateInput.Email)
 			if err != nil {
 				log.Printf("Error checking for existing email: %v\n", err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error checking for existing email"})
@@ -329,7 +328,7 @@ func (app *Application) UpdateUserDetails() gin.HandlerFunc {
 
 		// Check if the user is trying to update their phone number to one that already exists
 		if updateInput.Phone != nil && *updateInput.Phone != *user.Phone {
-			phoneExists, err := database.FindUserByPhone(ctx, app.userCollection, *updateInput.Phone)
+			phoneExists, err := app.store.UserStoreCollection.FindUserByPhone(ctx, *updateInput.Phone)
 			if err != nil {
 				log.Printf("Error checking for existing phone: %v\n", err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error checking for existing phone"})
@@ -359,7 +358,7 @@ func (app *Application) UpdateUserDetails() gin.HandlerFunc {
 		user.UpdatedAt, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 
 		// update user details in the database
-		err = database.UpdateUserDetails(ctx, app.userCollection, primitiveUserID, user)
+		err = app.store.UserStoreCollection.UpdateUserDetails(ctx, primitiveUserID, user)
 		if err != nil {
 			log.Printf("Error updating user details: %v\n", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating user details"})
@@ -377,7 +376,7 @@ func (app *Application) SearchProduct() gin.HandlerFunc {
 		ctx, cancel := requestContext(c, DefaultTimeout)
 		defer cancel()
 
-		products, err := database.FindAllProducts(ctx, app.productCollection)
+		products, err := app.store.ProductStoreCollection.FindAllProducts(ctx)
 		if err != nil {
 			log.Printf("Error querying products: %v\n", err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "something went wrong, please retry once again"})
@@ -413,7 +412,7 @@ func (app *Application) SearchProductByQuery() gin.HandlerFunc {
 		ctx, cancel := requestContext(c, DefaultTimeout)
 		defer cancel()
 
-		searchProducts, err := database.FindProductByQuery(ctx, app.productCollection, queryParam)
+		searchProducts, err := app.store.ProductStoreCollection.FindProductByQuery(ctx, queryParam)
 		if err != nil {
 			log.Printf("Error searching products: %v\n", err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "something went wrong, please retry once again"})
@@ -449,7 +448,7 @@ func (app *Application) ProductViewerAdmin() gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 			return
 		}
-		products, err := database.FindAllProducts(ctx, app.productCollection)
+		products, err := app.store.ProductStoreCollection.FindAllProducts(ctx)
 		if err != nil {
 			log.Printf("Error querying products: %v\n", err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "something went wrong, please retry once again"})

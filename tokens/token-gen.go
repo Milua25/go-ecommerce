@@ -21,6 +21,25 @@ type TokenDetails struct {
 	jwt.RegisteredClaims
 }
 
+type AuthService struct {
+	secretKey string
+}
+
+func NewAuthService(secretKey string) *AuthService {
+	return &AuthService{secretKey: secretKey}
+}
+
+func (s *AuthService) ValidateToken(signedToken string) (*TokenDetails, error) {
+	if s == nil {
+		return nil, fmt.Errorf("auth service is nil")
+	}
+	if s.secretKey == "" {
+		return nil, fmt.Errorf("secret key is not configured")
+	}
+
+	return ValidateToken(signedToken, s.secretKey)
+}
+
 func GenerateToken(email, uid, expires, refreshExpires, secretkey string) (string, string, error) {
 
 	expiresDuration, err := time.ParseDuration(expires)

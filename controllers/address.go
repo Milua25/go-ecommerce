@@ -8,18 +8,17 @@ import (
 	"github.com/milua25/e-commerce-backend/database"
 	"github.com/milua25/e-commerce-backend/helpers"
 	"github.com/milua25/e-commerce-backend/models"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 func (app *Application) CreateAddress() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userId := c.Query("id")
+		userId := c.Param("id")
 		if userId == "" {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "User ID is required"})
 			return
 		}
-		primitiveId, err := primitive.ObjectIDFromHex(userId)
+		primitiveId, err := bson.ObjectIDFromHex(userId)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID"})
 			return
@@ -38,16 +37,18 @@ func (app *Application) CreateAddress() gin.HandlerFunc {
 		}
 
 		newAddressModel := newAddress.ToModel()
+		log.Printf("New address model: %+v\n", newAddressModel)
 
 		ctx, cancel := requestContext(c, DefaultTimeout)
 		defer cancel()
 
-		err = database.AddAddressByUserID(ctx, app.userCollection, primitiveId, newAddressModel)
+		err = app.store.UserStoreCollection.AddAddressByUserID(ctx, primitiveId, newAddressModel)
 		if err != nil {
 			if err == database.ErrAddressMaxReached {
 				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Maximum number of addresses reached"})
 				return
 			}
+			log.Printf("Error adding address: %v\n", err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to add address"})
 			return
 		}
@@ -57,21 +58,17 @@ func (app *Application) CreateAddress() gin.HandlerFunc {
 
 }
 
-// func GetAddress() gin.HandlerFunc {}
-
-// func UpdateAddress() gin.HandlerFunc {}
-
 func (app *Application) DeleteAddress() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Implementation for deleting an address goes here
-		userId := c.Query("id")
+		userId := c.Param("id")
 		if userId == "" {
 			c.JSON(400, gin.H{"error": "User ID is required"})
 			return
 		}
 		addresses := make([]models.Address, 0)
 
-		primitiveId, err := primitive.ObjectIDFromHex(userId)
+		primitiveId, err := bson.ObjectIDFromHex(userId)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID"})
 			return
@@ -87,7 +84,7 @@ func (app *Application) DeleteAddress() gin.HandlerFunc {
 				bson.E{Key: "address", Value: addresses}},
 		}}
 
-		err = database.DeleteAddressByUserID(ctx, app.userCollection, primitiveId, filter, update)
+		err = app.store.UserStoreCollection.DeleteAddressByUserID(ctx, primitiveId, filter, update)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete address"})
 			return
@@ -107,7 +104,7 @@ func (app *Application) UpdateHomeAddress() gin.HandlerFunc {
 
 		}
 		// change id to primitive id
-		primitiveId, err := primitive.ObjectIDFromHex(userId)
+		primitiveId, err := bson.ObjectIDFromHex(userId)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID"})
 			return
@@ -127,7 +124,7 @@ func (app *Application) UpdateHomeAddress() gin.HandlerFunc {
 		ctx, cancel := requestContext(c, DefaultTimeout)
 		defer cancel()
 
-		err = database.UpdateHomeAddressByUserID(ctx, app.userCollection, primitiveId, updatedAddress.ToModel())
+		err = app.store.UserStoreCollection.UpdateHomeAddressByUserID(ctx, primitiveId, updatedAddress.ToModel())
 		if err != nil {
 			if err == database.ErrNoFieldsToUpdate {
 				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "No fields provided for update"})
@@ -152,7 +149,7 @@ func (app *Application) UpdateWorkAddress() gin.HandlerFunc {
 
 		}
 		// change id to primitive id
-		primitiveId, err := primitive.ObjectIDFromHex(userId)
+		primitiveId, err := bson.ObjectIDFromHex(userId)
 		if err != nil {
 			log.Printf("Invalid user ID: %v\n", err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID"})
@@ -175,7 +172,7 @@ func (app *Application) UpdateWorkAddress() gin.HandlerFunc {
 		ctx, cancel := requestContext(c, DefaultTimeout)
 		defer cancel()
 
-		err = database.UpdateWorkAddressByUserID(ctx, app.userCollection, primitiveId, updatedAddress.ToModel())
+		err = app.store.UserStoreCollection.UpdateWorkAddressByUserID(ctx, primitiveId, updatedAddress.ToModel())
 		if err != nil {
 			log.Printf("Error updating work address: %v\n", err)
 			if err == database.ErrNoFieldsToUpdate {

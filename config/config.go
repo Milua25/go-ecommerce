@@ -73,7 +73,7 @@ func LoadConfig() (*Config, []string) {
 		DBConfig: DBConfig{
 			Host:              requiredVars("DB_HOST"),
 			Port:              requiredVars("DB_PORT"),
-			User:              requiredVars("DB_USER"),
+			User:              requiredVars("DB_USERNAME"),
 			Password:          requiredVars("DB_PASSWORD"),
 			DBName:            requiredVars("DB_NAME"),
 			UserCollection:    requiredVars("DB_USER_COLLECTION"),
@@ -86,6 +86,9 @@ func LoadConfig() (*Config, []string) {
 			RefreshExp:    requiredVars("JWT_REFRESH_EXPIRES_IN"),
 		},
 	}
+	// if len(missingVars) > 0 {
+	// 	return &Config{}, missingVars
+	// }
 
 	return &cfg, missingVars
 }

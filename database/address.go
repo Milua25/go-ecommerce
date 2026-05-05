@@ -5,14 +5,14 @@ import (
 	"fmt"
 
 	"github.com/milua25/e-commerce-backend/models"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
-func AddAddressByUserID(ctx context.Context, collection *mongo.Collection, primitiveId primitive.ObjectID, newAddress models.Address) error {
+func AddAddressByUserID(ctx context.Context, collection *mongo.Collection, primitiveId bson.ObjectID, newAddress models.Address) error {
 	// Define the filter and update for the MongoDB operation
 	filter := bson.D{bson.E{Key: "$match", Value: bson.D{bson.E{Key: "_id", Value: primitiveId}}}}
+
 	unwind := bson.D{{
 		Key: "$unwind",
 		Value: bson.D{
@@ -24,11 +24,6 @@ func AddAddressByUserID(ctx context.Context, collection *mongo.Collection, primi
 			bson.E{Key: "_id", Value: "$address_id"},
 			bson.E{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
 		}}}
-	// addFields := bson.D{{
-	// 	Key: "$addFields",
-	// 	Value: bson.D{
-	// 		bson.E{Key: "address", Value: bson.D{{Key: "$concatArrays", Value: bson.A{"$address", bson.A{newAddress}}}}},
-	// 	}}}
 	// run the aggregation pipeline
 	cursor, err := collection.Aggregate(ctx, mongo.Pipeline{
 		filter, unwind, group,
@@ -53,7 +48,7 @@ func AddAddressByUserID(ctx context.Context, collection *mongo.Collection, primi
 	}
 
 	filter = bson.D{bson.E{Key: "_id", Value: primitiveId}}
-	update := bson.D{bson.E{Key: "$push", Value: bson.D{bson.E{Key: "address", Value: newAddress}}}}
+	update := bson.D{{Key: "$push", Value: bson.D{{Key: "address", Value: newAddress}}}}
 
 	result, err := collection.UpdateOne(ctx, filter, update)
 	if err != nil {
@@ -65,15 +60,15 @@ func AddAddressByUserID(ctx context.Context, collection *mongo.Collection, primi
 	return nil
 }
 
-func UpdateHomeAddressByUserID(ctx context.Context, collection *mongo.Collection, primitiveId primitive.ObjectID, newAddress models.Address) error {
+func UpdateHomeAddressByUserID(ctx context.Context, collection *mongo.Collection, primitiveId bson.ObjectID, newAddress models.Address) error {
 	return updateAddressByFixedIndex(ctx, collection, primitiveId, 0, newAddress)
 }
 
-func UpdateWorkAddressByUserID(ctx context.Context, collection *mongo.Collection, primitiveId primitive.ObjectID, newAddress models.Address) error {
+func UpdateWorkAddressByUserID(ctx context.Context, collection *mongo.Collection, primitiveId bson.ObjectID, newAddress models.Address) error {
 	return updateAddressByFixedIndex(ctx, collection, primitiveId, 1, newAddress)
 }
 
-func updateAddressByFixedIndex(ctx context.Context, collection *mongo.Collection, primitiveId primitive.ObjectID, index int, newAddress models.Address) error {
+func updateAddressByFixedIndex(ctx context.Context, collection *mongo.Collection, primitiveId bson.ObjectID, index int, newAddress models.Address) error {
 	filter := bson.D{
 		bson.E{Key: "_id", Value: primitiveId},
 		bson.E{Key: fmt.Sprintf("address.%d", index), Value: bson.D{bson.E{Key: "$exists", Value: true}}},

@@ -9,9 +9,15 @@ import (
 	"github.com/milua25/e-commerce-backend/tokens"
 )
 
-func Authentication() gin.HandlerFunc {
+func Authentication(authService *tokens.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Implementation for adding a product to the cart goes here
+		if authService == nil {
+			log.Println("Auth service is not configured")
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			return
+		}
+
 		clientToken := c.GetHeader("Authorization")
 		if clientToken == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authorization token is required"})
@@ -27,7 +33,7 @@ func Authentication() gin.HandlerFunc {
 		}
 
 		// Validate the token and extract user information
-		claims, err := tokens.ValidateToken(tokenString, "your_secret_key")
+		claims, err := authService.ValidateToken(tokenString)
 		if err != nil {
 			log.Println("Invalid JWT token:", err)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
